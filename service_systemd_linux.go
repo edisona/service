@@ -13,6 +13,12 @@ import (
 	"text/template"
 )
 
+const (
+	optionSystemdTemplate        = "systemdTemplate"
+	optionSystemdTimeoutSec      = "systemdTimeoutSec"
+	optionSystemdEnvironmentFile = "systemdEnvironmentFile"
+)
+
 func isSystemd() bool {
 	if _, err := os.Stat("/run/systemd/system"); err == nil {
 		return true
@@ -53,7 +59,8 @@ func (s *systemd) configPath() (cp string, err error) {
 	return
 }
 func (s *systemd) template() *template.Template {
-	return template.Must(template.New("").Funcs(tf).Parse(systemdScript))
+	t := s.Option.string(optionSystemdTemplate, systemdScript)
+	return template.Must(template.New("").Funcs(tf).Parse(t))
 }
 
 func (s *systemd) Install() error {
@@ -79,14 +86,18 @@ func (s *systemd) Install() error {
 
 	var to = &struct {
 		*Config
-		Path         string
-		ReloadSignal string
-		PIDFile      string
+		Path            string
+		ReloadSignal    string
+		PIDFile         string
+		EnvironmentFile string
+		TimeoutSec      string
 	}{
 		s.Config,
 		path,
 		s.Option.string(optionReloadSignal, ""),
 		s.Option.string(optionPIDFile, ""),
+		s.Option.string(optionSystemdEnvironmentFile, ""),
+		s.Option.string(optionSystemdTimeoutSec, ""),
 	}
 
 	err = s.template().Execute(f, to)
@@ -166,9 +177,11 @@ ExecStart={{.Path|cmdEscape}}{{range .Arguments}} {{.|cmd}}{{end}}
 {{if .UserName}}User={{.UserName}}{{end}}
 {{if .ReloadSignal}}ExecReload=/bin/kill -{{.ReloadSignal}} "$MAINPID"{{end}}
 {{if .PIDFile}}PIDFile={{.PIDFile|cmd}}{{end}}
+{{if .EnvironmentFile}}EnvironmentFile={{.EnvironmentFile}{{end}}
+{{if .TimeoutSec}}TimeoutSec={{.TimeoutSec}}{{end}}
 Restart=always
 RestartSec=120
-EnvironmentFile=-/etc/sysconfig/{{.Name}}
+
 
 [Install]
 WantedBy=multi-user.target
